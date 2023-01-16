@@ -22,6 +22,6 @@
     "Algorithmic parameters": {
         "Reconstruction voxel size [nm]": 75,
         "Clip factor for kernel cropping": 0.01,
-        "Iterations": 2
+        "Iterations": 20
     }
 }
