@@ -159,20 +159,23 @@ dataPropertiesDict = {'Camera pixel size [nm]': 95.7,
                       'Correct first cycle': True,
                       'Correct pixel offsets': True}
 
-imFormationModelParameters = {'Optical PSF path': r'\\storage3.ad.scilifelab.se\testalab\Andreas\SOLS\Scripts\PSF RW_1.26_100nmPx_101x101x101.tif',
+algOptionsDict = {'Reconstruction voxel size [nm]': 75,
+                  'Clip factor for kernel cropping': 0.01,
+                  'Iterations': 20}
+
+reconPxSize = str(algOptionsDict['Reconstruction voxel size [nm]'])
+psfPath = os.path.join(r'PSFs', reconPxSize + 'nm', 'PSF_RW_1.26_' + reconPxSize + 'nmPx_101x101x101.tif')
+
+imFormationModelParameters = {'Optical PSF path': psfPath,
                               'Confined sheet FWHM [nm]': 200,
                               'Read-out sheet FWHM [nm]': 1200,
                               'Background sheet ratio': 0.1}
-
-algOptionsDict = {'Reconstruction voxel size [nm]': 50,
-                  'Clip factor for kernel cropping': 0.01,
-                  'Iterations': 25}
 
 saveOptions = {'Save to disc': True,
                'Save mode': 'Final',
                'Progression mode': 'All',
                'Save folder': r'A:\GitHub\Deconvolution_module',
-               'Save name': 'TestDecon'}
+               'Save name': 'TestDecon_75nm'}
 
 import matplotlib.pyplot as plt
 
