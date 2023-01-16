@@ -149,20 +149,19 @@ class Deconvolver:
             return True
 
 dataPropertiesDict = {'Camera pixel size [nm]': 95.7,
-                      'Camera offset': 200,
+                      'Camera offset': 100,
                       'Scan step size [nm]': 210,
                       'Tilt angle [deg]': 35,
                       'Scan axis': 0,
                       'Tilt axis': 2,
                       'Data stacking': 'PLSR Interleaved',
-                      'Planes in cycle': 30,
+                      'Planes in cycle': 5,
                       'Cycles': 10,
-                      'Timepoints': 60,
-                      'Pos/Neg scan direction': 'Pos',
+                      'Pos/Neg scan direction': 'Neg',
                       'Correct first cycle': True,
-                      'Correct pixel offsets': True}
+                      'Correct pixel offsets': False}
 
-algOptionsDict = {'Reconstruction voxel size [nm]': 100,
+algOptionsDict = {'Reconstruction voxel size [nm]': 40,
                   'Clip factor for kernel cropping': 0.01,
                   'Iterations': 15}
 
@@ -177,13 +176,13 @@ imFormationModelParameters = {'Optical PSF path': psfPath,
 saveOptions = {'Save to disc': True,
                'Save mode': 'Final',
                'Progression mode': 'All',
-               'Save folder': r'D:\SnoutyData\2022-12-19',
-               'Save name': '60tp_timelapse'}
+               'Save folder': r'A:\GitHub\ImSim\Saved_data\PLSR_data_160123',
+               'Save name': 'Mixed_Sampple_PLSR_rsEGFP2'}
 
 import matplotlib.pyplot as plt
 
 deconvolver = Deconvolver()
-deconvolver.setAndLoadData(r'D:\SnoutyData\2022-12-19\ActinChromo_HeLa_N205S_cell2_plsr_timelapse_60tp_1min_rec_Orca.hdf5', dataPropertiesDict)
+deconvolver.setAndLoadData(r'A:\GitHub\ImSim\Saved_data\PLSR_data_160123\Mixed_Sampple_PLSR_rsEGFP2.tif', dataPropertiesDict)
 deconvolved = deconvolver.Deconvolve(imFormationModelParameters, algOptionsDict, saveOptions)
 
 # import napari

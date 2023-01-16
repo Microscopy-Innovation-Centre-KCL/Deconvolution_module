@@ -1,6 +1,7 @@
 *.tif
 *.tiff
 *.hdf5
+!/PSFs/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
