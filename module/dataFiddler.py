@@ -30,6 +30,26 @@ class DataFiddler:
 
         self.dataPropertiesDict = dataPropertiesDict
 
+    def checkData(self):
+        expectedLength = self.dataPropertiesDict['Timepoints'] * \
+                         self.dataPropertiesDict['Cycles'] * \
+                         self.dataPropertiesDict['Planes in cycle']
+
+        if expectedLength != len(self.rawData):
+            print('Frames in data does not match given data properties')
+            return False
+        else:
+            return True
+
+    def getDataTimepointShape(self):
+        framesInTimepoint = self.dataPropertiesDict['Cycles'] * self.dataPropertiesDict['Planes in cycle']
+        return (framesInTimepoint,
+                self.rawData.shape[1],
+                self.rawData.shape[2])
+
+    def getNrOfTimepoints(self):
+        return self.dataPropertiesDict['Timepoints']
+
     def getDataPropertiesDict(self):
         return self.dataPropertiesDict
 
@@ -72,9 +92,18 @@ class DataFiddler:
         data[:] = restacked
         del restacked
 
-    def getPreprocessedData(self):
+    def getPreprocessedData(self, timepoint=None):
+        if timepoint is None:
+            if self.getNrOfTimepoints() != 0:
+                print('Must specify timepoint for data with more than one timepoint')
+                return False
+            startFrame = 0
+            endFrame = len(self.rawData)
+        else:
+            startFrame = timepoint * self.getDataTimepointShape()[0]
+            endFrame = (timepoint + 1) * self.getDataTimepointShape()[0]
 
-        self.processedData = copy.copy(self.rawData)
+        self.processedData = copy.copy(self.rawData[startFrame:endFrame])
         if self.dataPropertiesDict['Correct pixel offsets']:
             self._correctPxOffsets(self.processedData)
         self._adjustForOffset(self.processedData)

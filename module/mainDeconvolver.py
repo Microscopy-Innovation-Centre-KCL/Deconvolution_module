@@ -52,10 +52,7 @@ class Deconvolver:
         K = self.KH.makePLSRKernel(self.DF.getDataPropertiesDict(), imFormationModelParameters, algOptionsDict)
         M = self.tMatHandler.makeSOLSTransformMatrix(self.DF.getDataPropertiesDict(), algOptionsDict)
 
-        data = self.DF.getPreprocessedData()
-        assert self.checkData(data), "Something wrong with data"
-
-        dataShape = np.shape(data)
+        dataShape = self.DF.getDataTimepointShape()
         reconShape = np.ceil(np.matmul(M, dataShape)).astype(int)
         """Prepare GPU blocks"""
         threadsperblock = 8
@@ -64,8 +61,7 @@ class Deconvolver:
         blocks_per_grid_x = (dataShape[2] + (threadsperblock - 1)) // threadsperblock
 
         """Prepare arrays"""
-        dev_data = cp.array(data)
-        dev_dataOnes = cp.ones_like(data, dtype=float)
+        dev_dataOnes = cp.ones(dataShape, dtype=float)
         dev_Ht_of_ones = cp.zeros(reconShape, dtype=float)
         dev_K = cp.array(K)
         dev_M = cp.array(M)
@@ -77,7 +73,6 @@ class Deconvolver:
         dev_Ht_of_ones = dev_Ht_of_ones.clip(
             0.3 * cp.max(dev_Ht_of_ones))  # Avoid divide by zero and crazy high guesses outside measured region, 0.3 is emperically chosen
         self.mempool.free_all_blocks()
-        dev_currentReconstruction = cp.ones(reconShape, dtype=float)
         dev_dataCanvas = cp.zeros(dataShape, dtype=float)
         dev_sampleCanvas = cp.zeros(reconShape, dtype=float)
 
@@ -86,56 +81,63 @@ class Deconvolver:
             saveRecons = []
             if progressionMode == 'Logarithmic':
                 indices = (iterations - np.arange(0, np.floor(np.log2(iterations)))**2)[::-1]
-        for i in range(iterations):
-            print('Iteration: ', i)
-            """Zero arrays"""
-            print('Made arrays')
-            t1 = time.time()
-            convTransform[
-                (blocks_per_grid_z, blocks_per_grid_y, blocks_per_grid_x), (
-                threadsperblock, threadsperblock, threadsperblock)](
-                dev_dataCanvas, dev_currentReconstruction, dev_K, dev_M)
-            cuda.synchronize()
-            t2 = time.time()
-            elapsed = t2-t1
-            print('Calculated dfg, elapsed = ', elapsed)
-            cp.divide(dev_data, dev_dataCanvas, dev_dataCanvas) #dataCanvas now stores the error
-            print('Calculated error')
-            t1 = time.time()
-            invConvTransform[
-                (blocks_per_grid_z, blocks_per_grid_y, blocks_per_grid_x), (
-                threadsperblock, threadsperblock, threadsperblock)](
-                dev_dataCanvas, dev_sampleCanvas, dev_K, dev_M) #Sample canvas now stores the distributed error
-            cuda.synchronize()
-            t2 = time.time()
-            elapsed = t2-t1
-            print('Distributed error, elapsed = ', elapsed)
-            cp.divide(dev_sampleCanvas, dev_Ht_of_ones, out=dev_sampleCanvas) #Sample canvas now stores the "correction factor"
-            cp.multiply(dev_currentReconstruction, dev_sampleCanvas, out=dev_currentReconstruction)
-            if saveMode == 'Progression' and (progressionMode == 'All' or i in indices):
-                saveRecons.append(cp.asnumpy(dev_currentReconstruction))
 
-        finalReconstruction = cp.asnumpy(dev_currentReconstruction)
+        for tp in range(self.DF.getNrOfTimepoints()):
+            data = self.DF.getPreprocessedData(timepoint=tp) #timepoint is zero-indexed
+            assert self.checkData(data), "Something wrong with data"
+            dev_data = cp.array(data)
+            dev_currentReconstruction = cp.ones(reconShape, dtype=float)
+            for i in range(iterations):
+                print('Timepoint: ', tp, ', Iteration: ', i)
+                """Zero arrays"""
+                print('Made arrays')
+                t1 = time.time()
+                convTransform[
+                    (blocks_per_grid_z, blocks_per_grid_y, blocks_per_grid_x), (
+                    threadsperblock, threadsperblock, threadsperblock)](
+                    dev_dataCanvas, dev_currentReconstruction, dev_K, dev_M)
+                cuda.synchronize()
+                t2 = time.time()
+                elapsed = t2-t1
+                print('Calculated dfg, elapsed = ', elapsed)
+                cp.divide(dev_data, dev_dataCanvas, dev_dataCanvas) #dataCanvas now stores the error
+                print('Calculated error')
+                t1 = time.time()
+                invConvTransform[
+                    (blocks_per_grid_z, blocks_per_grid_y, blocks_per_grid_x), (
+                    threadsperblock, threadsperblock, threadsperblock)](
+                    dev_dataCanvas, dev_sampleCanvas, dev_K, dev_M) #Sample canvas now stores the distributed error
+                cuda.synchronize()
+                t2 = time.time()
+                elapsed = t2-t1
+                print('Distributed error, elapsed = ', elapsed)
+                cp.divide(dev_sampleCanvas, dev_Ht_of_ones, out=dev_sampleCanvas) #Sample canvas now stores the "correction factor"
+                cp.multiply(dev_currentReconstruction, dev_sampleCanvas, out=dev_currentReconstruction)
+                if saveMode == 'Progression' and (progressionMode == 'All' or i in indices):
+                    saveRecons.append(cp.asnumpy(dev_currentReconstruction))
+
+            finalReconstruction = cp.asnumpy(dev_currentReconstruction)
+
+            if saveToDisc:
+                if saveMode == 'Final':
+                    saveDataPath = os.path.join(saveFolder, saveName + '_Timepoint_' + str(tp) + '_FinalDeconvolved.tif')
+                    DataIO_tools.save_data(finalReconstruction, saveDataPath)
+                elif saveMode == 'Progression':
+                    saveRecons = np.asarray(saveRecons)
+                    saveDataPath = os.path.join(saveFolder, saveName + '_DeconvolutionProgression.tif')
+                    DataIO_tools.save_data(saveRecons, saveDataPath)
+                saveParamsPath = os.path.join(saveFolder, saveName + '_DeconvolutionParameters.json')
+                saveParamDict = {'Data Parameters': dataPropertiesDict,
+                                 'Image formation model parameters': imFormationModelParameters,
+                                 'Algorithmic parameters': algOptionsDict}
+                with open(saveParamsPath, 'w') as fp:
+                    json.dump(saveParamDict, fp, indent=4)
+                    fp.close()
+
         del dev_currentReconstruction
         del dev_dataCanvas
         del dev_sampleCanvas
         self.mempool.free_all_blocks()
-
-        if saveToDisc:
-            if saveMode == 'Final':
-                saveDataPath = os.path.join(saveFolder, saveName + '_FinalDeconvolved.tif')
-                DataIO_tools.save_data(finalReconstruction, saveDataPath)
-            elif saveMode == 'Progression':
-                saveRecons = np.asarray(saveRecons)
-                saveDataPath = os.path.join(saveFolder, saveName + '_DeconvolutionProgression.tif')
-                DataIO_tools.save_data(saveRecons, saveDataPath)
-            saveParamsPath = os.path.join(saveFolder, saveName + '_DeconvolutionParameters.json')
-            saveParamDict = {'Data Parameters': dataPropertiesDict,
-                             'Image formation model parameters': imFormationModelParameters,
-                             'Algorithmic parameters': algOptionsDict}
-            with open(saveParamsPath, 'w') as fp:
-                json.dump(saveParamDict, fp, indent=4)
-                fp.close()
 
         return finalReconstruction
 
@@ -148,42 +150,42 @@ class Deconvolver:
 
 dataPropertiesDict = {'Camera pixel size [nm]': 95.7,
                       'Camera offset': 200,
-                      'Scan step size [nm]': 105,
+                      'Scan step size [nm]': 210,
                       'Tilt angle [deg]': 35,
                       'Scan axis': 0,
                       'Tilt axis': 2,
                       'Data stacking': 'PLSR Interleaved',
-                      'Planes in cycle': 20,
-                      'Cycles': 20,
+                      'Planes in cycle': 30,
+                      'Cycles': 10,
+                      'Timepoints': 60,
                       'Pos/Neg scan direction': 'Pos',
                       'Correct first cycle': True,
                       'Correct pixel offsets': True}
 
-algOptionsDict = {'Reconstruction voxel size [nm]': 75,
+algOptionsDict = {'Reconstruction voxel size [nm]': 100,
                   'Clip factor for kernel cropping': 0.01,
-                  'Iterations': 20}
+                  'Iterations': 15}
 
 reconPxSize = str(algOptionsDict['Reconstruction voxel size [nm]'])
 psfPath = os.path.join(r'PSFs', reconPxSize + 'nm', 'PSF_RW_1.26_' + reconPxSize + 'nmPx_101x101x101.tif')
 
 imFormationModelParameters = {'Optical PSF path': psfPath,
-                              'Confined sheet FWHM [nm]': 200,
+                              'Confined sheet FWHM [nm]': 300,
                               'Read-out sheet FWHM [nm]': 1200,
-                              'Background sheet ratio': 0.1}
+                              'Background sheet ratio': 0.10}
 
 saveOptions = {'Save to disc': True,
                'Save mode': 'Final',
                'Progression mode': 'All',
-               'Save folder': r'A:\GitHub\Deconvolution_module',
-               'Save name': 'TestDecon_75nm'}
+               'Save folder': r'D:\SnoutyData\2022-12-19',
+               'Save name': '60tp_timelapse'}
 
 import matplotlib.pyplot as plt
 
 deconvolver = Deconvolver()
-deconvolver.setAndLoadData(r'ActinChromo_HeLa_N205S_cell7_plsr_rec_Orca.hdf5', dataPropertiesDict)
-ppdata = deconvolver.DF.getPreprocessedData()
+deconvolver.setAndLoadData(r'D:\SnoutyData\2022-12-19\ActinChromo_HeLa_N205S_cell2_plsr_timelapse_60tp_1min_rec_Orca.hdf5', dataPropertiesDict)
 deconvolved = deconvolver.Deconvolve(imFormationModelParameters, algOptionsDict, saveOptions)
 
-import napari
-viewer = napari.Viewer()
-new_layer = viewer.add_image(deconvolved, rgb=True)
+# import napari
+# viewer = napari.Viewer()
+# new_layer = viewer.add_image(deconvolved, rgb=True)
