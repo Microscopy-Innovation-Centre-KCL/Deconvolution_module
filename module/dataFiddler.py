@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import copy
 from module.DataIO_tools import DataIO_tools
+import scipy.ndimage as ndi
 
 class DataFiddler:
 
@@ -92,6 +93,17 @@ class DataFiddler:
         data[:] = restacked
         del restacked
 
+    def _correctSkewedScan(self, data, pxPerCycleShift):
+        """Takes in restacked data"""
+        print('Correcting for skewed scan')
+        #Below some attempt to automatically get correct axis, but not sure its relevant
+        shiftAxis = 2 - self.dataPropertiesDict['Tilt axis']
+        shift = [0,0]
+        for i in range(len(data)):
+            cycleIndex = np.mod(i, self.dataPropertiesDict['Cycles'])
+            shift[shiftAxis] = cycleIndex*pxPerCycleShift
+            data[i] = ndi.shift(data[i], shift, mode='constant').clip(0) #Clipping since shift may cause small negative due to interpolation
+
     def getPreprocessedData(self, timepoint=None):
         if timepoint is None:
             if self.getNrOfTimepoints() != 0:
@@ -111,6 +123,9 @@ class DataFiddler:
             self._correctFirstCycle(self.processedData)
         if self.dataPropertiesDict['Data stacking'] == 'PLSR Interleaved':
             self._restackData(self.processedData)
+        if self.dataPropertiesDict['Skew correction pixel per cycle'] != 0:
+            self._correctSkewedScan(self.processedData,
+                                    pxPerCycleShift=self.dataPropertiesDict['Skew correction pixel per cycle'])
         if self.dataPropertiesDict['Pos/Neg scan direction'] == 'Neg':
             return np.flip(self.processedData, self.dataPropertiesDict['Scan axis'])
         else:

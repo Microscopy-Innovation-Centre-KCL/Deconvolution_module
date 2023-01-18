@@ -148,6 +148,28 @@ class Deconvolver:
         else:
             return True
 
+def fuseTimePoints(folderPath, fileNamePart1, nrArray, fileNamePart2, averageTimepoints=False):
+    fullPath = os.path.join(folderPath, fileNamePart1 + str(nrArray[0]) + fileNamePart2)
+    print('Loading path: ', fullPath)
+    dataTimePoint = DataIO_tools.load_data(fullPath)
+    fullShape = [len(nrArray), dataTimePoint.shape[0], dataTimePoint.shape[1], dataTimePoint.shape[2]]
+    allDataTimePoints = np.zeros(fullShape)
+    allDataTimePoints[0] = dataTimePoint
+    for i in nrArray[1:]:
+        fullPath = os.path.join(folderPath, fileNamePart1 + str(nrArray[i]) + fileNamePart2)
+        print('Loading path: ', fullPath)
+        allDataTimePoints[i] = DataIO_tools.load_data(fullPath)
+    if averageTimepoints:
+        savePath = os.path.join(folderPath, fileNamePart1 + fileNamePart2.split('.')[0] + '_AveragedTimeLapse.tif')
+        DataIO_tools.save_data(np.mean(allDataTimePoints, axis=0), savePath)
+    else:
+        savePath = os.path.join(folderPath, fileNamePart1 + fileNamePart2.split('.')[0] + '_FusedTimeLapse.tif')
+        DataIO_tools.save_data(allDataTimePoints, savePath)
+
+
+
+
+
 dataPropertiesDict = {'Camera pixel size [nm]': 95.7,
                       'Camera offset': 200,
                       'Scan step size [nm]': 210,
@@ -155,12 +177,13 @@ dataPropertiesDict = {'Camera pixel size [nm]': 95.7,
                       'Scan axis': 0,
                       'Tilt axis': 2,
                       'Data stacking': 'PLSR Interleaved',
-                      'Planes in cycle': 30,
+                      'Planes in cycle': 20,
                       'Cycles': 10,
-                      'Timepoints': 60,
+                      'Timepoints': 3,
                       'Pos/Neg scan direction': 'Pos',
                       'Correct first cycle': True,
-                      'Correct pixel offsets': True}
+                      'Correct pixel offsets': True,
+                      'Skew correction pixel per cycle': 0}
 
 algOptionsDict = {'Reconstruction voxel size [nm]': 100,
                   'Clip factor for kernel cropping': 0.01,
@@ -172,18 +195,18 @@ psfPath = os.path.join(r'PSFs', reconPxSize + 'nm', 'PSF_RW_1.26_' + reconPxSize
 imFormationModelParameters = {'Optical PSF path': psfPath,
                               'Confined sheet FWHM [nm]': 300,
                               'Read-out sheet FWHM [nm]': 1200,
-                              'Background sheet ratio': 0.10}
+                              'Background sheet ratio': 1}
 
 saveOptions = {'Save to disc': True,
                'Save mode': 'Final',
                'Progression mode': 'All',
-               'Save folder': r'D:\SnoutyData\2022-12-19',
-               'Save name': '60tp_timelapse'}
+               'Save folder': r'D:\SnoutyData\2022-12-17',
+               'Save name': 'MAP2_Hela_15on100off1ro_N205S_cell4_confx3'}
 
 import matplotlib.pyplot as plt
 
 deconvolver = Deconvolver()
-deconvolver.setAndLoadData(r'D:\SnoutyData\2022-12-19\ActinChromo_HeLa_N205S_cell2_plsr_timelapse_60tp_1min_rec_Orca.hdf5', dataPropertiesDict)
+deconvolver.setAndLoadData(r'D:\SnoutyData\2022-12-17\MAP2_Hela_15on100off1ro_N205S_cell4_confx3_rec_Orca.hdf5', dataPropertiesDict)
 deconvolved = deconvolver.Deconvolve(imFormationModelParameters, algOptionsDict, saveOptions)
 
 # import napari
