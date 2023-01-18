@@ -148,6 +148,28 @@ class Deconvolver:
         else:
             return True
 
+def fuseTimePoints(folderPath, fileNamePart1, nrArray, fileNamePart2, averageTimepoints=False):
+    fullPath = os.path.join(folderPath, fileNamePart1 + str(nrArray[0]) + fileNamePart2)
+    print('Loading path: ', fullPath)
+    dataTimePoint = DataIO_tools.load_data(fullPath)
+    fullShape = [len(nrArray), dataTimePoint.shape[0], dataTimePoint.shape[1], dataTimePoint.shape[2]]
+    allDataTimePoints = np.zeros(fullShape)
+    allDataTimePoints[0] = dataTimePoint
+    for i in nrArray[1:]:
+        fullPath = os.path.join(folderPath, fileNamePart1 + str(nrArray[i]) + fileNamePart2)
+        print('Loading path: ', fullPath)
+        allDataTimePoints[i] = DataIO_tools.load_data(fullPath)
+    if averageTimepoints:
+        savePath = os.path.join(folderPath, fileNamePart1 + fileNamePart2.split('.')[0] + '_AveragedTimeLapse.tif')
+        DataIO_tools.save_data(np.mean(allDataTimePoints, axis=0), savePath)
+    else:
+        savePath = os.path.join(folderPath, fileNamePart1 + fileNamePart2.split('.')[0] + '_FusedTimeLapse.tif')
+        DataIO_tools.save_data(allDataTimePoints, savePath)
+
+
+
+
+
 dataPropertiesDict = {'Camera pixel size [nm]': 95.7,
                       'Camera offset': 100,
                       'Scan step size [nm]': 210,
@@ -159,7 +181,8 @@ dataPropertiesDict = {'Camera pixel size [nm]': 95.7,
                       'Cycles': 10,
                       'Pos/Neg scan direction': 'Neg',
                       'Correct first cycle': True,
-                      'Correct pixel offsets': False}
+                      'Correct pixel offsets': False,
+                      'Skew correction pixel per cycle': 0}
 
 algOptionsDict = {'Reconstruction voxel size [nm]': 40,
                   'Clip factor for kernel cropping': 0.01,
@@ -171,7 +194,7 @@ psfPath = os.path.join(r'PSFs', reconPxSize + 'nm', 'PSF_RW_1.26_' + reconPxSize
 imFormationModelParameters = {'Optical PSF path': psfPath,
                               'Confined sheet FWHM [nm]': 300,
                               'Read-out sheet FWHM [nm]': 1200,
-                              'Background sheet ratio': 0.10}
+                              'Background sheet ratio': 1}
 
 saveOptions = {'Save to disc': True,
                'Save mode': 'Final',
