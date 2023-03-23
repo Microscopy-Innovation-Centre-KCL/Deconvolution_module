@@ -108,16 +108,19 @@ class DataFiddler:
             data[i] = ndi.shift(data[i], shift, mode='constant').clip(0) #Clipping since shift may cause small negative due to interpolation
 
     def getPreprocessedData(self, reconOptionsDict, timepoints=None):
-        """If an array is given as timepoints parameter, this function returns the average of those timepoints"""
+        """If an array is given as timepoints parameter, this function returns the average of those timepoints
+        - timpoints parameter needs to be either  "All", an np.ndarray of ints or a single int32 value
+        """
+        print('Type of timepoints parameter is: ', type(timepoints))
         if timepoints is None:
             if self.getNrOfTimepoints() > 1:
                 print('Must specify timepoint/s for data with more than one timepoint')
                 return False
             self.processedData = copy.copy(self.rawData[0,:,:,:])
-        elif type(timepoints) == int:
-            self.processedData = copy.copy(self.rawData[timepoints,:,:,:])
-        elif type(timepoints) == np.ndarray and timepoints.dtype in (int, 'int64', 'int32'):
+        elif isinstance(timepoints, np.ndarray):
             self.processedData = copy.copy(self.rawData[timepoints,:,:,:]).mean(axis=0)
+        elif isinstance(timepoints, np.int32):
+            self.processedData = copy.copy(self.rawData[timepoints,:,:,:])
         else:
             print('Unknown format of timepoints parameter')
 

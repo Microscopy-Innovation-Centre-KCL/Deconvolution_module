@@ -99,10 +99,14 @@ class Deconvolver:
                 indices = (iterations - np.arange(0, np.floor(np.log2(iterations)))**2)[::-1]
 
         """Prepare how to process timepoints"""
-        if reconOptionsDict['Process timepoints'] == 'All':
-            timepoints = np.arange(self.DF.getNrOfTimepoints())
-        elif type(reconOptionsDict['Process timepoints']) == np.ndarray:
-            timepoints = reconOptionsDict['Process timepoints']
+        timepoints = reconOptionsDict['Process timepoints']
+        if timepoints == 'All':
+            timepoints = np.arange(self.DF.getNrOfTimepoints(), dtype=int)
+            print('Processing all timepoints in data, which is: ', timepoints)
+        elif isinstance(timepoints, (np.ndarray, list, tuple)):
+            assert np.all([i == int(i) for i in timepoints]), 'Timepoints needs to be given as integers'
+            timepoints = np.array(timepoints, dtype='int32')
+            print('Processing the following timepoints in data: ', timepoints)
         else:
             print('Unknown format of timpoints to process, should be "All" or array specifying timepoints')
 
@@ -277,40 +281,40 @@ dataPropertiesDict = {'Camera pixel size [nm]': 116,
                       'Scan axis': 0,
                       'Tilt axis': 2,
                       'Data stacking': 'PLSR Interleaved',
-                      'Planes in cycle': 20,
-                      'Cycles': 10,
-                      'Timepoints': 3,
+                      'Planes in cycle': 10,
+                      'Cycles': 30,
+                      'Timepoints': 25,
                       'Pos/Neg scan direction': 'Pos'}
 
 reconOptionsDict = {'Correct first cycle': True,
                     'Correct pixel offsets': False,
                     'Skew correction pixel per cycle': 0,
                     'Process timepoints': 'All',
-                    'Average timepoints': True}
+                    'Average timepoints': False}
 
 algOptionsDict = {'Gradient consent': False,
-                  'Reconstruction voxel size [nm]': 100,
+                  'Reconstruction voxel size [nm]': 75,
                   'Clip factor for kernel cropping': 0.01,
-                  'Iterations': 10}
+                  'Iterations': 20}
 
 reconPxSize = str(algOptionsDict['Reconstruction voxel size [nm]'])
 psfPath = os.path.join(r'PSFs', reconPxSize + 'nm', 'PSF_RW_1.26_' + reconPxSize + 'nmPx_101x101x101.tif')
 
 imFormationModelParameters = {'Optical PSF path': psfPath,
-                              'Confined sheet FWHM [nm]': 300,
+                              'Confined sheet FWHM [nm]': 250,
                               'Read-out sheet FWHM [nm]': 1200,
                               'Background sheet ratio': 0.1}
 
 saveOptions = {'Save to disc': True,
                'Save mode': 'Final',
                'Progression mode': 'All',
-               'Save folder': r'\\storage3.ad.scilifelab.se\testalab\Andreas\SOLS\Data\2023-03-14\GOOD',
-               'Save name': 'MAP2_N205S_test2_plsr_rec_Orca_1.tif'}
+               'Save folder': r'D:\SnoutyData\2023-03-22',
+               'Save name': 'MAP2_N205S_plsr_timelapse_25x5min_N205Ssettings_rec_Orca.tif'}
 
 import matplotlib.pyplot as plt
 
 deconvolver = Deconvolver()
-deconvolver.setAndLoadData(r'\\storage3.ad.scilifelab.se\testalab\Andreas\SOLS\Data\2023-03-14\GOOD\MAP2_N205S_test2_plsr_rec_Orca_1.hdf5', dataPropertiesDict)
+deconvolver.setAndLoadData(r'D:\SnoutyData\2023-03-22\MAP2_N205S_plsr_timelapse_25x5min_N205Ssettings_rec_Orca.hdf5', dataPropertiesDict)
 deconvolved = deconvolver.Deconvolve(reconOptionsDict, algOptionsDict, imFormationModelParameters, saveOptions)
 
 # import napari
