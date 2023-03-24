@@ -1,4 +1,33 @@
 from numba import cuda
+import math
+
+@cuda.jit
+def gaussDistribTransform(dataStack, sampleVol, transformMat, sigma_z, sigma_y, sigma_x, z_halfsize, y_halfsize, x_halfsize):
+    """Distribute the values in the data stack back to the sample canvas in the nearest neighbour voxel"""
+    idz, idy, idx = cuda.grid(3)
+    if idz < dataStack.shape[0] and idy < dataStack.shape[1] and idx < dataStack.shape[2]:
+        sampleCoords_z = transformMat[0, 0] * idz + transformMat[0, 1] * idy + transformMat[0, 2] * idx
+        sampleCoords_y = transformMat[1, 0] * idz + transformMat[1, 1] * idy + transformMat[1, 2] * idx
+        sampleCoords_x = transformMat[2, 0] * idz + transformMat[2, 1] * idy + transformMat[2, 2] * idx
+
+        # Round to nearest and cast to int
+        sampleIndex_z = int(round(sampleCoords_z))
+        sampleIndex_y = int(round(sampleCoords_y))
+        sampleIndex_x = int(round(sampleCoords_x))
+
+        dataValue = dataStack[idz, idy, idx]
+
+        for index_z in range(sampleIndex_z - z_halfsize, sampleIndex_z + z_halfsize + 1):
+            for index_y in range(sampleIndex_y - y_halfsize, sampleIndex_y + y_halfsize + 1):
+                for index_x in range(sampleIndex_x - x_halfsize, sampleIndex_x + x_halfsize + 1):
+                    dz = float(index_z) - sampleCoords_z
+                    dy = float(index_y) - sampleCoords_y
+                    dx = float(index_x) - sampleCoords_x
+                    scaleFac = math.exp(-((dz**2 / (2*sigma_z**2)) + (dy**2 / (2*sigma_y**2)) + (dx**2 / (2*sigma_x**2))))
+                    if 0 <= index_z < sampleVol.shape[0] and 0 <= index_y < sampleVol.shape[
+                        1] and 0 <= index_x < \
+                            sampleVol.shape[2]:
+                        cuda.atomic.add(sampleVol, (index_z, index_y, index_x), scaleFac*dataValue)
 
 @cuda.jit
 def convTransform(dataStack, sampleVol, kernel, transformMat):

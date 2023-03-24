@@ -3,7 +3,7 @@ import numpy as np
 
 class TransformMatHandler:
 
-    def makeSOLSTransformMatrix(self, dataPropertiesDict, algOptionsDict):
+    def makeSOLSTransformMatrix(self, dataPropertiesDict, algOptionsDict, reconOptionsDict):
         """Make coordinate transformation matrix such that sampleCoordinates = M * dataCoordinates,
         This is not a fully generic approach, if the tilt eg. is negative, it is not possible to create a correct
         transform matrix with this code. If needed, it might be easier to flip the scan axis of the data first instead
@@ -14,7 +14,7 @@ class TransformMatHandler:
         camPxSize_nm = dataPropertiesDict['Camera pixel size [nm]']
         scanStepSize_nm = dataPropertiesDict['Scan step size [nm]']
 
-        sampleVxSize_nm = algOptionsDict['Reconstruction voxel size [nm]']
+        sampleVxSize_nm = reconOptionsDict['Reconstruction voxel size [nm]']
 
         otherAxis = 3 - (scanAxis + tiltAxis)
 

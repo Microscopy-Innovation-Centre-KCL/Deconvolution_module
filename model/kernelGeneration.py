@@ -6,10 +6,10 @@ from scipy.signal import fftconvolve
 
 class KernelHandler:
 
-    def makePLSRKernel(self, dataPropertiesDict, imFormationModelParameters, algOptionsDict):
+    def makePLSRKernel(self, dataPropertiesDict, imFormationModelParameters, algOptionsDict, reconOptionsDict):
 
         opticalPSFPath = imFormationModelParameters['Optical PSF path']
-        vxSize = algOptionsDict['Reconstruction voxel size [nm]']
+        vxSize = reconOptionsDict['Reconstruction voxel size [nm]']
         confinedSheetFWHM_nm = imFormationModelParameters['Confined sheet FWHM [nm]']
         roSheetFWHM_nm = imFormationModelParameters['Read-out sheet FWHM [nm]']
         bgSheetRatio = imFormationModelParameters['Background sheet ratio']
@@ -41,6 +41,23 @@ class KernelHandler:
             finalKernel = ePSF
         DataIO_tools.save_data(self._cropToOptimize(finalKernel, clipFactor=cropToOptimizeClipFactor), 'emSheetUsed.tif')
         return self._cropToOptimize(finalKernel, clipFactor=cropToOptimizeClipFactor)
+
+    def makeGaussianSigmas(self, dataPropertiesDict, reconOptionsDict):
+
+        camPxSize = dataPropertiesDict['Camera pixel size [nm]']
+        reconVxSize = reconOptionsDict['Reconstruction voxel size [nm]']
+        dyStepSize =  dataPropertiesDict['Scan step size [nm]']
+        angle_rad = np.deg2rad(dataPropertiesDict['Tilt angle [deg]'])
+        interp_size_fac = 1  # 1 means gauss FWHM = distance to nearest datapoint
+        x_dist_px = camPxSize / reconVxSize  # px size in vx
+        y_dist_px = dyStepSize / reconVxSize
+        z_dist_px = dyStepSize * np.tan(angle_rad) / reconVxSize  # distance between planes in vx
+        sigma_z = z_dist_px / 2.355
+        sigma_y = y_dist_px / 2.355
+        sigma_x = x_dist_px / 2.355
+        sigma_z, sigma_y, sigma_x = interp_size_fac * sigma_z, interp_size_fac * sigma_y, interp_size_fac * sigma_x
+
+        return sigma_z, sigma_y, sigma_x
 
     def _cropToOptimize(self, volume, clipFactor=0.01):
 

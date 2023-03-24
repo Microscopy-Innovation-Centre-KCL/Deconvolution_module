@@ -9,7 +9,7 @@ from numba.cuda.random import xoroshiro128p_uniform_float32, create_xoroshiro128
 import cupy as cp
 from model.kernelGeneration import KernelHandler
 from model.transformMatGeneration import TransformMatHandler
-from model.gpuTransforms import convTransform, invConvTransform
+from model.gpuTransforms import gaussDistribTransform, convTransform, invConvTransform
 from model.dataFiddler import DataFiddler
 from model.DataIO_tools import DataIO_tools
 import json
@@ -27,6 +27,77 @@ class Deconvolver:
 
     def setAndLoadData(self, path, dataPropertiesDict):
         self.DF.loadData(path, dataPropertiesDict)
+
+    def simpleDeskew(self, algOptionsDict, reconOptionsDict, saveOptions):
+        """Deskew the data in one step transform"""
+
+        saveToDisc = saveOptions['Save to disc']
+        if saveToDisc:
+            try:
+                saveFolder = saveOptions['Save folder']
+                saveName = saveOptions['Save name']
+            except KeyError:
+                print('Save folder and/or name missing')
+        else:
+            saveMode = None
+
+        M = self.tMatHandler.makeSOLSTransformMatrix(self.DF.getDataPropertiesDict(), algOptionsDict, reconOptionsDict)
+
+        """Calculate reconstruction canvas size"""
+        dataShape = self.DF.getDataTimepointShape()
+        reconShape = np.ceil(np.matmul(M, dataShape)).astype(int)
+        """Prepare GPU blocks for shape of data"""
+        threadsperblock = 8
+        data_blocks_per_grid_z = (dataShape[0] + (threadsperblock - 1)) // threadsperblock
+        data_blocks_per_grid_y = (dataShape[1] + (threadsperblock - 1)) // threadsperblock
+        data_blocks_per_grid_x = (dataShape[2] + (threadsperblock - 1)) // threadsperblock
+
+        sigma_z, sigma_y, sigma_x = self.KH.makeGaussianSigmas(self.DF.getDataPropertiesDict(), reconOptionsDict)
+
+        """Reconstruct"""
+
+        dataOnes = cp.ones(dataShape)
+        invTransfOnes = cp.zeros(reconShape)
+        gaussDistribTransform[(data_blocks_per_grid_z, data_blocks_per_grid_y, data_blocks_per_grid_x),
+                              (threadsperblock, threadsperblock, threadsperblock)](dataOnes, invTransfOnes, M,
+                                                                                   sigma_z, sigma_y, sigma_x,
+                                                                                   int(np.ceil(sigma_z)),
+                                                                                   int(np.ceil(sigma_y)),
+                                                                                   int(np.ceil(sigma_x)))
+        del dataOnes
+
+        invTransfOnes = invTransfOnes.clip(0.01)
+        """Prepare how to process timepoints"""
+        timepoints = self._getTimepointsList(reconOptionsDict)
+        for tp in timepoints:
+            adjustedData = cp.array(self.DF.getPreprocessedData(reconOptionsDict, timepoints=tp))
+            recon_canvas = cp.zeros(reconShape, dtype=float)
+            gaussDistribTransform[(data_blocks_per_grid_z, data_blocks_per_grid_y, data_blocks_per_grid_x),
+                                  (threadsperblock, threadsperblock, threadsperblock)](adjustedData, recon_canvas, M,
+                                                                                       sigma_z, sigma_y, sigma_x,
+                                                                                   int(np.ceil(sigma_z)),
+                                                                                   int(np.ceil(sigma_y)),
+                                                                                   int(np.ceil(sigma_x)))
+            finalReconstruction = cp.asnumpy(cp.divide(recon_canvas, invTransfOnes))
+
+            if saveToDisc:
+                vx_size = (reconOptionsDict['Reconstruction voxel size [nm]'],) * 3
+                saveDataPath = os.path.join(saveFolder, saveName + '_Timepoint_' + str(tp) + '_SimpleDeskew.tif')
+                DataIO_tools.save_data(finalReconstruction, saveDataPath, vx_size=vx_size, unit='nm')
+                saveParamsPath = os.path.join(saveFolder, saveName + '_ReconstructionParameters.json')
+                saveParamDict = {'Data Parameters': dataPropertiesDict,
+                                 'Reconstruction parameters': reconOptionsDict,
+                                 'Image formation model parameters': imFormationModelParameters,
+                                 'Algorithmic parameters': algOptionsDict}
+                with open(saveParamsPath, 'w') as fp:
+                    json.dump(saveParamDict, fp, indent=4)
+                    fp.close()
+
+        del adjustedData
+        del recon_canvas
+        del invTransfOnes
+        self.mempool.free_all_blocks()
+
 
     def Deconvolve(self, reconOptionsDict, algOptionsDict, imFormationModelParameters, saveOptions):
 
@@ -57,8 +128,9 @@ class Deconvolver:
         except KeyError:
             gradientConsent = False
 
-        K = self.KH.makePLSRKernel(self.DF.getDataPropertiesDict(), imFormationModelParameters, algOptionsDict)
-        M = self.tMatHandler.makeSOLSTransformMatrix(self.DF.getDataPropertiesDict(), algOptionsDict)
+        K = self.KH.makePLSRKernel(self.DF.getDataPropertiesDict(), imFormationModelParameters, algOptionsDict,
+                                   reconOptionsDict)
+        M = self.tMatHandler.makeSOLSTransformMatrix(self.DF.getDataPropertiesDict(), algOptionsDict, reconOptionsDict)
 
         dataShape = self.DF.getDataTimepointShape()
         reconShape = np.ceil(np.matmul(M, dataShape)).astype(int)
@@ -99,24 +171,12 @@ class Deconvolver:
                 indices = (iterations - np.arange(0, np.floor(np.log2(iterations)))**2)[::-1]
 
         """Prepare how to process timepoints"""
-        timepoints = reconOptionsDict['Process timepoints']
-        if timepoints == 'All':
-            timepoints = np.arange(self.DF.getNrOfTimepoints(), dtype=int)
-            print('Processing all timepoints in data, which is: ', timepoints)
-        elif isinstance(timepoints, (np.ndarray, list, tuple)):
-            assert np.all([i == int(i) for i in timepoints]), 'Timepoints needs to be given as integers'
-            timepoints = np.array(timepoints, dtype='int32')
-            print('Processing the following timepoints in data: ', timepoints)
-        else:
-            print('Unknown format of timpoints to process, should be "All" or array specifying timepoints')
-
-        if reconOptionsDict['Average timepoints']:
-            timepoints = [timepoints]
+        timepoints = self._getTimepointsList(reconOptionsDict)
 
         """Run deconvolution iteration"""
         for tp in timepoints:
             data = self.DF.getPreprocessedData(reconOptionsDict, timepoints=tp) #timepoint is zero-indexed
-            assert self.checkData(data), "Something wrong with data"
+            assert self._checkData(data), "Something wrong with data"
 
             dev_data = cp.array(data)
             if gradientConsent:
@@ -130,7 +190,7 @@ class Deconvolver:
                 t1 = time.time()
                 convTransform[
                     (data_blocks_per_grid_z, data_blocks_per_grid_y, data_blocks_per_grid_x), (
-                    threadsperblock, threadsperblock, threadsperblock)](
+                        threadsperblock, threadsperblock, threadsperblock)](
                     dev_dataCanvas, dev_currentReconstruction, dev_K, dev_M)
                 cuda.synchronize()
                 t2 = time.time()
@@ -144,7 +204,7 @@ class Deconvolver:
                         threadsperblock**3 * data_blocks_per_grid_z * data_blocks_per_grid_y * data_blocks_per_grid_x, seed=i+tp*iterations)
                     gpuBinomialSplit[
                         (data_blocks_per_grid_z, data_blocks_per_grid_y, data_blocks_per_grid_x), (
-                        threadsperblock, threadsperblock, threadsperblock)](dev_data, dev_dataBin1, dev_dataBin2, 0.5, rng_states)
+                            threadsperblock, threadsperblock, threadsperblock)](dev_data, dev_dataBin1, dev_dataBin2, 0.5, rng_states)
                     cp.divide(dev_dataCanvas, 2, dev_dataCanvas) #since data is devided into two bins
                     cp.divide(dev_dataBin2, dev_dataCanvas, dev_dataCanvas2)
                     cp.divide(dev_dataBin1, dev_dataCanvas, dev_dataCanvas) #dataCanvas now stores the error
@@ -180,7 +240,7 @@ class Deconvolver:
                     t1 = time.time()
                     invConvTransform[
                         (data_blocks_per_grid_z, data_blocks_per_grid_y, data_blocks_per_grid_x), (
-                        threadsperblock, threadsperblock, threadsperblock)](
+                            threadsperblock, threadsperblock, threadsperblock)](
                         dev_dataCanvas, dev_sampleCanvas, dev_K, dev_M) #Sample canvas now stores the distributed error
                     cuda.synchronize()
                     t2 = time.time()
@@ -205,6 +265,7 @@ class Deconvolver:
                     DataIO_tools.save_data(saveRecons, saveDataPath, vx_size=vx_size, unit='nm')
                 saveParamsPath = os.path.join(saveFolder, saveName + '_DeconvolutionParameters.json')
                 saveParamDict = {'Data Parameters': dataPropertiesDict,
+                                 'Reconstruction parameters': reconOptionsDict,
                                  'Image formation model parameters': imFormationModelParameters,
                                  'Algorithmic parameters': algOptionsDict}
                 with open(saveParamsPath, 'w') as fp:
@@ -218,13 +279,30 @@ class Deconvolver:
 
         return finalReconstruction
 
-    def checkData(self, data):
+    def _checkData(self, data):
         #ToDo: Insert relevent checks here
         if np.min(data) < 0:
             return False
         else:
             return True
 
+    def _getTimepointsList(self, reconOptionsDict):
+
+        timepoints = reconOptionsDict['Process timepoints']
+        if timepoints == 'All':
+            timepoints = np.arange(self.DF.getNrOfTimepoints(), dtype=int)
+            print('Processing all timepoints in data, which is: ', timepoints)
+        elif isinstance(timepoints, (np.ndarray, list, tuple)):
+            assert np.all([i == int(i) for i in timepoints]), 'Timepoints needs to be given as integers'
+            timepoints = np.array(timepoints, dtype='int32')
+            print('Processing the following timepoints in data: ', timepoints)
+        else:
+            print('Unknown format of timpoints to process, should be "All" or array specifying timepoints')
+
+        if reconOptionsDict['Average timepoints']:
+            timepoints = [timepoints]
+
+        return timepoints
 
 @cuda.jit
 def gpuBinomialSplit(rawData, bin1Data, bin2Data, p, rng_states):
@@ -276,28 +354,28 @@ def fuseTimePoints(folderPath, fileNamePart1, nrArray, fileNamePart2, averageTim
 
 dataPropertiesDict = {'Camera pixel size [nm]': 116,
                       'Camera offset': 100,
-                      'Scan step size [nm]': 210,
+                      'Scan step size [nm]': 105,
                       'Tilt angle [deg]': 35,
                       'Scan axis': 0,
                       'Tilt axis': 2,
                       'Data stacking': 'PLSR Interleaved',
-                      'Planes in cycle': 10,
-                      'Cycles': 30,
-                      'Timepoints': 25,
-                      'Pos/Neg scan direction': 'Pos'}
+                      'Planes in cycle': 20,
+                      'Cycles': 20,
+                      'Timepoints': 1,
+                      'Pos/Neg scan direction': 'Neg'}
 
-reconOptionsDict = {'Correct first cycle': True,
+reconOptionsDict = {'Reconstruction voxel size [nm]': 75,
+                    'Correct first cycle': True,
                     'Correct pixel offsets': False,
                     'Skew correction pixel per cycle': 0,
                     'Process timepoints': 'All',
                     'Average timepoints': False}
 
 algOptionsDict = {'Gradient consent': False,
-                  'Reconstruction voxel size [nm]': 75,
                   'Clip factor for kernel cropping': 0.01,
                   'Iterations': 20}
 
-reconPxSize = str(algOptionsDict['Reconstruction voxel size [nm]'])
+reconPxSize = str(reconOptionsDict['Reconstruction voxel size [nm]'])
 psfPath = os.path.join(r'PSFs', reconPxSize + 'nm', 'PSF_RW_1.26_' + reconPxSize + 'nmPx_101x101x101.tif')
 
 imFormationModelParameters = {'Optical PSF path': psfPath,
@@ -308,15 +386,15 @@ imFormationModelParameters = {'Optical PSF path': psfPath,
 saveOptions = {'Save to disc': True,
                'Save mode': 'Final',
                'Progression mode': 'All',
-               'Save folder': r'D:\SnoutyData\2023-03-22',
-               'Save name': 'MAP2_N205S_plsr_timelapse_25x5min_N205Ssettings_rec_Orca.tif'}
+               'Save folder': r'A:\GitHub\ImSim\Saved_data\pLSRData',
+               'Save name': 'Large_VirtualCell_Two-ColorPLSR_SparserVesicleLabelling_RED'}
 
 import matplotlib.pyplot as plt
 
 deconvolver = Deconvolver()
-deconvolver.setAndLoadData(r'D:\SnoutyData\2023-03-22\MAP2_N205S_plsr_timelapse_25x5min_N205Ssettings_rec_Orca.hdf5', dataPropertiesDict)
-deconvolved = deconvolver.Deconvolve(reconOptionsDict, algOptionsDict, imFormationModelParameters, saveOptions)
-
+deconvolver.setAndLoadData(r'A:\GitHub\ImSim\Saved_data\pLSRData\Large_VirtualCell_Two-ColorPLSR_SparserVesicleLabelling_RED.tif', dataPropertiesDict)
+# deconvolved = deconvolver.Deconvolve(reconOptionsDict, algOptionsDict, imFormationModelParameters, saveOptions)
+deconvolver.simpleDeskew(algOptionsDict, reconOptionsDict, saveOptions)
 # import napari
 # viewer = napari.Viewer()
 # new_layer = viewer.add_image(deconvolved, rgb=True)
