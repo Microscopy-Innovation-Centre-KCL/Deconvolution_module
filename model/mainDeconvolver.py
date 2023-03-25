@@ -262,7 +262,7 @@ class Deconvolver:
             finalReconstruction = cp.asnumpy(dev_currentReconstruction)
 
             if saveToDisc:
-                vx_size = (algOptionsDict['Reconstruction voxel size [nm]'],)*3
+                vx_size = (reconOptionsDict['Reconstruction voxel size [nm]'],)*3
                 if saveMode == 'Final':
                     saveDataPath = os.path.join(saveFolder, saveName + '_Timepoint_' + str(tp) + '_FinalDeconvolved.tif')
                     DataIO_tools.save_data(finalReconstruction, saveDataPath, vx_size=vx_size, unit='nm')
@@ -366,9 +366,9 @@ dataPropertiesDict = {'Camera pixel size [nm]': 116,
                       'Scan axis': 0,
                       'Tilt axis': 2,
                       'Data stacking': 'PLSR Interleaved',
-                      'Planes in cycle': 40,
-                      'Cycles': 10,
-                      'Timepoints': 20,
+                      'Planes in cycle': 20,
+                      'Cycles': 20,
+                      'Timepoints': 5,
                       'Pos/Neg scan direction': 'Pos'}
 
 reconOptionsDict = {'Reconstruction voxel size [nm]': 100,
@@ -380,7 +380,7 @@ reconOptionsDict = {'Reconstruction voxel size [nm]': 100,
 
 algOptionsDict = {'Gradient consent': False,
                   'Clip factor for kernel cropping': 0.01,
-                  'Iterations': 20}
+                  'Iterations': 10}
 
 reconPxSize = str(reconOptionsDict['Reconstruction voxel size [nm]'])
 psfPath = os.path.join(r'PSFs', reconPxSize + 'nm', 'PSF_RW_1.26_' + reconPxSize + 'nmPx_101x101x101.tif')
@@ -393,15 +393,15 @@ imFormationModelParameters = {'Optical PSF path': psfPath,
 saveOptions = {'Save to disc': True,
                'Save mode': 'Final',
                'Progression mode': 'All',
-               'Save folder': r'D:\SnoutyData\2023-03-24',
-               'Save name': 'H2B_Histone_timelapse_20x15min_rec_Orca.tif'}
+               'Save folder': r'\\storage3.ad.scilifelab.se\testalab\Andreas\SOLS\Data\2023-03-02',
+               'Save name': 'Test_N205S_cell3_plsr_2xpwr_105step_5x_rec_Orca_10it.tif'}
 
 import matplotlib.pyplot as plt
 
 deconvolver = Deconvolver()
-deconvolver.setAndLoadData(r'D:\SnoutyData\2023-03-24\H2B_Histone_timelapse_20x15min_rec_Orca.hdf5', dataPropertiesDict)
-# deconvolved = deconvolver.Deconvolve(reconOptionsDict, algOptionsDict, imFormationModelParameters, saveOptions)
-deconvolver.simpleDeskew(algOptionsDict, reconOptionsDict, saveOptions)
+deconvolver.setAndLoadData(r'\\storage3.ad.scilifelab.se\testalab\Andreas\SOLS\Data\2023-03-02\Test_N205S_cell3_plsr_2xpwr_105step_5x_rec_Orca.hdf5', dataPropertiesDict)
+deconvolved = deconvolver.Deconvolve(reconOptionsDict, algOptionsDict, imFormationModelParameters, saveOptions)
+# deconvolver.simpleDeskew(algOptionsDict, reconOptionsDict, saveOptions)
 # import napari
 # viewer = napari.Viewer()
 # new_layer = viewer.add_image(deconvolved, rgb=True)
