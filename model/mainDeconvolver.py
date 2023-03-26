@@ -28,6 +28,9 @@ class Deconvolver:
     def setAndLoadData(self, path, dataPropertiesDict):
         self.DF.loadData(path, dataPropertiesDict)
 
+    def setDataPropertiesDict(self, dataPropertiesDict):
+        self.DF.setDataPropertiesDict(dataPropertiesDict)
+
     def simpleDeskew(self, algOptionsDict, reconOptionsDict, saveOptions):
         """Deskew the data in one step transform"""
 
@@ -42,8 +45,9 @@ class Deconvolver:
             saveMode = None
 
         M = self.tMatHandler.makeSOLSTransformMatrix(self.DF.getDataPropertiesDict(), algOptionsDict, reconOptionsDict)
-
+        cpM = cuda.to_device(M)
         """Calculate reconstruction canvas size"""
+        print('Timepoint shape = ', self.DF.getDataTimepointShape())
         dataShape = self.DF.getDataTimepointShape()
         reconShape = np.ceil(np.matmul(M, dataShape)).astype(int)
         """Prepare GPU blocks for shape of data"""
@@ -55,20 +59,23 @@ class Deconvolver:
         sigma_z, sigma_y, sigma_x = self.KH.makeGaussianSigmas(self.DF.getDataPropertiesDict(), reconOptionsDict)
 
         """Reconstruct"""
-
+        print('Before allocating')
         dataOnes = cp.ones(dataShape)
         invTransfOnes = cp.zeros(reconShape)
+        print('After allocating')
         gaussDistribTransform[(data_blocks_per_grid_z, data_blocks_per_grid_y, data_blocks_per_grid_x),
-                              (threadsperblock, threadsperblock, threadsperblock)](dataOnes, invTransfOnes, M,
+                              (threadsperblock, threadsperblock, threadsperblock)](dataOnes, invTransfOnes, cpM,
                                                                                    sigma_z, sigma_y, sigma_x,
                                                                                    int(np.ceil(sigma_z)),
                                                                                    int(np.ceil(sigma_y)),
                                                                                    int(np.ceil(sigma_x)))
+        print('After transform')
         del dataOnes
 
         invTransfOnes = invTransfOnes.clip(0.01)
         """Prepare how to process timepoints"""
         timepoints = self._getTimepointsList(reconOptionsDict)
+        print('Timepoints = ', timepoints)
         for tp in timepoints:
             adjustedData = cp.array(self.DF.getPreprocessedData(reconOptionsDict, timepoints=tp))
             recon_canvas = cp.zeros(reconShape, dtype=float)
@@ -354,17 +361,17 @@ def fuseTimePoints(folderPath, fileNamePart1, nrArray, fileNamePart2, averageTim
 
 dataPropertiesDict = {'Camera pixel size [nm]': 116,
                       'Camera offset': 100,
-                      'Scan step size [nm]': 105,
+                      'Scan step size [nm]': 210,
                       'Tilt angle [deg]': 35,
                       'Scan axis': 0,
                       'Tilt axis': 2,
                       'Data stacking': 'PLSR Interleaved',
-                      'Planes in cycle': 20,
-                      'Cycles': 20,
-                      'Timepoints': 1,
-                      'Pos/Neg scan direction': 'Neg'}
+                      'Planes in cycle': 40,
+                      'Cycles': 10,
+                      'Timepoints': 20,
+                      'Pos/Neg scan direction': 'Pos'}
 
-reconOptionsDict = {'Reconstruction voxel size [nm]': 75,
+reconOptionsDict = {'Reconstruction voxel size [nm]': 100,
                     'Correct first cycle': True,
                     'Correct pixel offsets': False,
                     'Skew correction pixel per cycle': 0,
@@ -386,13 +393,13 @@ imFormationModelParameters = {'Optical PSF path': psfPath,
 saveOptions = {'Save to disc': True,
                'Save mode': 'Final',
                'Progression mode': 'All',
-               'Save folder': r'A:\GitHub\ImSim\Saved_data\pLSRData',
-               'Save name': 'Large_VirtualCell_Two-ColorPLSR_SparserVesicleLabelling_RED'}
+               'Save folder': r'D:\SnoutyData\2023-03-24',
+               'Save name': 'H2B_Histone_timelapse_20x15min_rec_Orca.tif'}
 
 import matplotlib.pyplot as plt
 
 deconvolver = Deconvolver()
-deconvolver.setAndLoadData(r'A:\GitHub\ImSim\Saved_data\pLSRData\Large_VirtualCell_Two-ColorPLSR_SparserVesicleLabelling_RED.tif', dataPropertiesDict)
+deconvolver.setAndLoadData(r'D:\SnoutyData\2023-03-24\H2B_Histone_timelapse_20x15min_rec_Orca.hdf5', dataPropertiesDict)
 # deconvolved = deconvolver.Deconvolve(reconOptionsDict, algOptionsDict, imFormationModelParameters, saveOptions)
 deconvolver.simpleDeskew(algOptionsDict, reconOptionsDict, saveOptions)
 # import napari

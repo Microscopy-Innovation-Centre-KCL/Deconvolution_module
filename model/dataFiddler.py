@@ -14,8 +14,9 @@ class DataFiddler:
         self.rawData = None
         self.adjustedData = None
         self.dataPropertiesDict = None
+        self.dataMakesSense = None
 
-    def loadData(self, path, dataPropertiesDict, h5dataset=None):
+    def loadData(self, path, dataPropertiesDict=None, h5dataset=None):
 
         ext = os.path.splitext(path)[1]
         if ext in ['.hdf5', '.hdf']:
@@ -29,10 +30,21 @@ class DataFiddler:
             with tiff.TiffFile(path) as datafile:
                 self.rawData = datafile.asarray().astype(float)
 
+        if dataPropertiesDict is None: #No dataPropertiesDict given
+            if self.dataPropertiesDict is None: # no existing dataPropertiesDict
+                print('Missing dataPropertiesDict')
+            else: #No dataPropertiesDict given but previous one existing
+                self.checkData()
+        else: # New dataPropertiesDict given
+            self.dataPropertiesDict = dataPropertiesDict
+            self.checkData()
+
+    def unloadData(self):
+        self.rawData = None
+
+    def setDataPropertiesDict(self, dataPropertiesDict):
         self.dataPropertiesDict = dataPropertiesDict
         self.checkData()
-        #Reshape so timepoints gets its own dimension
-        self.rawData.shape = np.insert(self.getDataTimepointShape(), 0, self.getNrOfTimepoints()) #Insert nr of timepoints in front of shape
 
     def checkData(self):
         expectedLength = self.dataPropertiesDict['Timepoints'] * \
@@ -41,8 +53,12 @@ class DataFiddler:
 
         if expectedLength != len(self.rawData):
             print('Frames in data does not match given data properties')
+            self.dataMakesSense = False
             return False
         else:
+            print('Data properties matches given parameters! (this check is/may not be complete)')
+            self.dataMakesSense = True
+            self.rawData.shape = np.insert(self.getDataTimepointShape(), 0, self.getNrOfTimepoints()) #Insert nr of timepoints in front of shape
             return True
 
     def getDataTimepointShape(self):
