@@ -361,53 +361,55 @@ def fuseTimePoints(folderPath, fileNamePart1, nrArray, fileNamePart2, averageTim
 
 dataPropertiesDict = {'Camera pixel size [nm]': 116,
                       'Camera offset': 100,
-                      'Scan step size [nm]': 210,
+                      'Scan step size [nm]': 105,
                       'Tilt angle [deg]': 35,
                       'Scan axis': 0,
                       'Tilt axis': 2,
                       'Data stacking': 'PLSR Interleaved',
                       'Planes in cycle': 20,
                       'Cycles': 20,
-                      'Timepoints': 5,
-                      'Pos/Neg scan direction': 'Pos'}
+                      'Timepoints': 1,
+                      'Pos/Neg scan direction': 'Neg'} #Neg in most simulations, Pos in real data
 
 reconOptionsDict = {'Reconstruction voxel size [nm]': 100,
                     'Correct first cycle': True,
                     'Correct pixel offsets': False,
                     'Skew correction pixel per cycle': 0,
                     'Process timepoints': 'All',
-                    'Average timepoints': False}
+                    'Average timepoints': True}
 
 algOptionsDict = {'Gradient consent': False,
                   'Clip factor for kernel cropping': 0.01,
                   'Iterations': 10}
 
 reconPxSize = str(reconOptionsDict['Reconstruction voxel size [nm]'])
-psfPath = os.path.join(r'PSFs', reconPxSize + 'nm', 'PSF_RW_1.26_' + reconPxSize + 'nmPx_101x101x101.tif')
+detNA = 1.1#1.1 or 1.26 available now
+psfPath = os.path.join(r'PSFs', str(detNA)+'NA', reconPxSize + 'nm', 'PSF_RW_'+str(detNA)+'_' + reconPxSize + 'nmPx_101x101x101.tif')
 
 imFormationModelParameters = {'Optical PSF path': psfPath,
-                              'Confined sheet FWHM [nm]': 250,
+                              'Detection NA': detNA,
+                              'Confined sheet FWHM [nm]': 100,
                               'Read-out sheet FWHM [nm]': 1200,
-                              'Background sheet ratio': 0.1}
+                              'Background sheet ratio': 0.3}
 
 saveOptions = {'Save to disc': True,
                'Save mode': 'Final',
                'Progression mode': 'All',
-               'Save folder': r'\\storage3.ad.scilifelab.se\testalab\Andreas\SOLS\Data\2023-03-02',
-               'Save name': 'Test_N205S_cell3_plsr_2xpwr_105step_5x_rec_Orca_10it.tif'}
+               'Save folder': r'A:\GitHub\ImSim\Saved_data\pLSRData',
+               'Save name': 'Large_VirtualCel_250f_per_uml_plsr_rsEGFP(N205S)_20x20steps_105nmSteps_500msOff_1.1NA'}
 
 import matplotlib.pyplot as plt
 
 deconvolver = Deconvolver()
-deconvolver.setAndLoadData(r'\\storage3.ad.scilifelab.se\testalab\Andreas\SOLS\Data\2023-03-02\Test_N205S_cell3_plsr_2xpwr_105step_5x_rec_Orca.hdf5', dataPropertiesDict)
-deconvolved = deconvolver.Deconvolve(reconOptionsDict, algOptionsDict, imFormationModelParameters, saveOptions)
+deconvolver.setAndLoadData(r'A:\GitHub\ImSim\Saved_data\pLSRData\Large_VirtualCel_250f_per_uml_plsr_rsEGFP(N205S)_20x20steps_105nmSteps_500msOff_1.1NA.tif', dataPropertiesDict)
+# deconvolved = deconvolver.Deconvolve(reconOptionsDict, algOptionsDict, imFormationModelParameters, saveOptions)
 # deconvolver.simpleDeskew(algOptionsDict, reconOptionsDict, saveOptions)
 # import napari
 # viewer = napari.Viewer()
 # new_layer = viewer.add_image(deconvolved, rgb=True)
 
 # data = cp.random.poisson(10*np.ones([10,10,10]))
-# bin1 = cp.zeros_like(data)
+# bin1 = cp.zeros_like(data)8
 # bin2 = cp.zeros_like(data)
 # dataShape = np.shape(data)
 
