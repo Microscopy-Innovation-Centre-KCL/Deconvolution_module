@@ -25,6 +25,7 @@ class DataFiddler:
                     print('No dataset given, loading first one')
                     h5dataset = list(datafile.keys())[0]
                 self.rawData = np.array(datafile[h5dataset][:]).astype(float)
+                datafile.close()
 
         elif ext in ['.tiff', '.tif']:
             with tiff.TiffFile(path) as datafile:
@@ -87,18 +88,20 @@ class DataFiddler:
 
     def _adjustForOffset(self, data):
         print('Adjusting for camera offset')
-        data[:] = (data - self.dataPropertiesDict['Camera offset']).clip(0)
+        data[:] = (data - self.dataPropertiesDict['Camera offset']).clip(0.1)
 
     def _correctFirstCycle(self, data):
+        """This is done on non-restacked data"""
         print('Correcting first cycle')
         planesInCycle = self.dataPropertiesDict['Planes in cycle']
 
-        averageFirstCycle = np.mean(data[:planesInCycle])
-        averageSecondCycle = np.mean(data[planesInCycle:2 * planesInCycle])
-        averageLastCycle = np.mean(data[-planesInCycle:])
+        averageFirstCycle = np.mean(data[:planesInCycle], axis=0)
+        averageSecondCycle = np.mean(data[planesInCycle:2 * planesInCycle], axis=0)
+        averageLastCycle = np.mean(data[-planesInCycle:], axis=0)
 
         corrFac = (averageSecondCycle + averageLastCycle) / (2 * averageFirstCycle)
-        data[:planesInCycle] *= corrFac
+        for i in range(planesInCycle):
+            data[i] *= corrFac
 
     def _restackData(self, data):
         print('Restacking data')
@@ -149,7 +152,7 @@ class DataFiddler:
             self._restackData(self.processedData)
         if reconOptionsDict['Skew correction pixel per cycle'] != 0:
             self._correctSkewedScan(self.processedData,
-                                    pxPerCycleShift=self.dataPropertiesDict['Skew correction pixel per cycle'])
+                                    pxPerCycleShift=reconOptionsDict['Skew correction pixel per cycle'])
         if self.dataPropertiesDict['Pos/Neg scan direction'] == 'Neg':
             return np.flip(self.processedData, self.dataPropertiesDict['Scan axis'])
         else:

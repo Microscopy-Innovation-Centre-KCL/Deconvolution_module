@@ -15,6 +15,7 @@ from model.DataIO_tools import DataIO_tools
 import json
 import math
 import copy
+import time
 class Deconvolver:
 
     def __init__(self):
@@ -34,6 +35,7 @@ class Deconvolver:
     def simpleDeskew(self, algOptionsDict, reconOptionsDict, saveOptions):
         """Deskew the data in one step transform"""
 
+        startTime = time.time()
         saveToDisc = saveOptions['Save to disc']
         if saveToDisc:
             try:
@@ -86,7 +88,7 @@ class Deconvolver:
                                                                                    int(np.ceil(sigma_y)),
                                                                                    int(np.ceil(sigma_x)))
             finalReconstruction = cp.asnumpy(cp.divide(recon_canvas, invTransfOnes))
-
+            print('Reconstruction finished at t = ', time.time() - startTime)
             if saveToDisc:
                 vx_size = (reconOptionsDict['Reconstruction voxel size [nm]'],) * 3
                 saveDataPath = os.path.join(saveFolder, saveName + '_Timepoint_' + str(tp) + '_SimpleDeskew.tif')
@@ -107,7 +109,7 @@ class Deconvolver:
 
 
     def Deconvolve(self, reconOptionsDict, algOptionsDict, imFormationModelParameters, saveOptions):
-
+        startTime = time.time()
         """Unpack options"""
         saveToDisc = saveOptions['Save to disc']
         if saveToDisc:
@@ -260,7 +262,7 @@ class Deconvolver:
                     saveRecons.append(cp.asnumpy(dev_currentReconstruction))
 
             finalReconstruction = cp.asnumpy(dev_currentReconstruction)
-
+            print('Deconvolution finished at t = ', time.time() - startTime)
             if saveToDisc:
                 vx_size = (reconOptionsDict['Reconstruction voxel size [nm]'],)*3
                 if saveMode == 'Final':
@@ -368,15 +370,15 @@ dataPropertiesDict = {'Camera pixel size [nm]': 116,
                       'Data stacking': 'PLSR Interleaved',
                       'Planes in cycle': 20,
                       'Cycles': 20,
-                      'Timepoints': 1,
-                      'Pos/Neg scan direction': 'Neg'} #Neg in most simulations, Pos in real data
+                      'Timepoints': 5,
+                      'Pos/Neg scan direction': 'Pos'} #Neg in most simulations, Pos in real data
 
 reconOptionsDict = {'Reconstruction voxel size [nm]': 100,
                     'Correct first cycle': True,
                     'Correct pixel offsets': False,
-                    'Skew correction pixel per cycle': 0,
+                    'Skew correction pixel per cycle': 0,#~-0.3 used for skewed stage scan
                     'Process timepoints': 'All',
-                    'Average timepoints': True}
+                    'Average timepoints': False}
 
 algOptionsDict = {'Gradient consent': False,
                   'Clip factor for kernel cropping': 0.01,
@@ -388,20 +390,20 @@ psfPath = os.path.join(r'PSFs', str(detNA)+'NA', reconPxSize + 'nm', 'PSF_RW_'+s
 
 imFormationModelParameters = {'Optical PSF path': psfPath,
                               'Detection NA': detNA,
-                              'Confined sheet FWHM [nm]': 100,
+                              'Confined sheet FWHM [nm]': 200,
                               'Read-out sheet FWHM [nm]': 1200,
-                              'Background sheet ratio': 0.3}
+                              'Background sheet ratio': 0.1}
 
 saveOptions = {'Save to disc': True,
                'Save mode': 'Final',
                'Progression mode': 'All',
-               'Save folder': r'A:\GitHub\ImSim\Saved_data\pLSRData',
-               'Save name': 'Large_VirtualCel_250f_per_uml_plsr_rsEGFP(N205S)_20x20steps_105nmSteps_500msOff_1.1NA'}
+               'Save folder': r'D:\SnoutyData\2023-03-24_H2B_timelapse',
+               'Save name': 'H2B_Histone_timelapse_20x15min_rec_Orca'}
 
 import matplotlib.pyplot as plt
 
 deconvolver = Deconvolver()
-deconvolver.setAndLoadData(r'A:\GitHub\ImSim\Saved_data\pLSRData\Large_VirtualCel_250f_per_uml_plsr_rsEGFP(N205S)_20x20steps_105nmSteps_500msOff_1.1NA.tif', dataPropertiesDict)
+deconvolver.setAndLoadData(r'D:\SnoutyData\2023-03-24_H2B_timelapse\H2B_Histone_timelapse_20x15min_rec_Orca.hdf5', dataPropertiesDict)
 # deconvolved = deconvolver.Deconvolve(reconOptionsDict, algOptionsDict, imFormationModelParameters, saveOptions)
 # deconvolver.simpleDeskew(algOptionsDict, reconOptionsDict, saveOptions)
 # import napari
