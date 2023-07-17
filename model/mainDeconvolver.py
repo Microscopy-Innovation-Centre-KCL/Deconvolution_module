@@ -363,14 +363,14 @@ def fuseTimePoints(folderPath, fileNamePart1, nrArray, fileNamePart2, averageTim
 
 dataPropertiesDict = {'Camera pixel size [nm]': 116,
                       'Camera offset': 100,
-                      'Scan step size [nm]': 105,
+                      'Scan step size [nm]': 210, #105 or 210
                       'Tilt angle [deg]': 35,
                       'Scan axis': 0,
                       'Tilt axis': 2,
                       'Data stacking': 'PLSR Interleaved',
-                      'Planes in cycle': 20,
-                      'Cycles': 20,
-                      'Timepoints': 5,
+                      'Planes in cycle': 30, # 30 planes for 60 um and 20 planes for 40 um
+                      'Cycles': 10, #if 105 nm step size -> 20 cycles, 210 nm -> 10 cycles
+                      'Timepoints': 3,
                       'Pos/Neg scan direction': 'Pos'} #Neg in most simulations, Pos in real data
 
 reconOptionsDict = {'Reconstruction voxel size [nm]': 100,
@@ -378,7 +378,7 @@ reconOptionsDict = {'Reconstruction voxel size [nm]': 100,
                     'Correct pixel offsets': False,
                     'Skew correction pixel per cycle': 0,#~-0.3 used for skewed stage scan
                     'Process timepoints': 'All',
-                    'Average timepoints': False}
+                    'Average timepoints': True}
 
 algOptionsDict = {'Gradient consent': False,
                   'Clip factor for kernel cropping': 0.01,
@@ -397,15 +397,17 @@ imFormationModelParameters = {'Optical PSF path': psfPath,
 saveOptions = {'Save to disc': True,
                'Save mode': 'Final',
                'Progression mode': 'All',
-               'Save folder': r'D:\SnoutyData\2023-03-24_H2B_timelapse',
-               'Save name': 'H2B_Histone_timelapse_20x15min_rec_Orca'}
+               'Save folder': r'D:\SnoutyData\2023-07-14',
+               'Save name': 'PLSR_Test2_PFA_fixation_Tub-NB-N205S_rec_Orca'}
 
 import matplotlib.pyplot as plt
 
 deconvolver = Deconvolver()
-deconvolver.setAndLoadData(r'D:\SnoutyData\2023-03-24_H2B_timelapse\H2B_Histone_timelapse_20x15min_rec_Orca.hdf5', dataPropertiesDict)
+deconvolver.setAndLoadData(r'D:\SnoutyData\2023-07-14\PLSR_Test2_PFA_fixation_Tub-NB-N205S_rec_Orca.hdf5', dataPropertiesDict)
+
 # deconvolved = deconvolver.Deconvolve(reconOptionsDict, algOptionsDict, imFormationModelParameters, saveOptions)
-# deconvolver.simpleDeskew(algOptionsDict, reconOptionsDict, saveOptions)
+deconvolver.simpleDeskew(algOptionsDict, reconOptionsDict, saveOptions)
+
 # import napari
 # viewer = napari.Viewer()
 # new_layer = viewer.add_image(deconvolved, rgb=True)
