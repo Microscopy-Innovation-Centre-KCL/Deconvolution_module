@@ -363,13 +363,13 @@ def fuseTimePoints(folderPath, fileNamePart1, nrArray, fileNamePart2, averageTim
 
 dataPropertiesDict = {'Camera pixel size [nm]': 116,
                       'Camera offset': 100,
-                      'Scan step size [nm]': 210, #105 or 210
+                      'Scan step size [nm]': 105, #105 or 210
                       'Tilt angle [deg]': 35,
                       'Scan axis': 0,
                       'Tilt axis': 2,
                       'Data stacking': 'PLSR Interleaved',
                       'Planes in cycle': 30, # 30 planes for 60 um and 20 planes for 40 um
-                      'Cycles': 10, #if 105 nm step size -> 20 cycles, 210 nm -> 10 cycles
+                      'Cycles': 20, #if 105 nm step size -> 20 cycles, 210 nm -> 10 cycles
                       'Timepoints': 3,
                       'Pos/Neg scan direction': 'Pos'} #Neg in most simulations, Pos in real data
 
@@ -398,15 +398,15 @@ saveOptions = {'Save to disc': True,
                'Save mode': 'Final',
                'Progression mode': 'All',
                'Save folder': r'D:\SnoutyData\2023-07-14',
-               'Save name': 'PLSR_Test2_PFA_fixation_Tub-NB-N205S_rec_Orca'}
+               'Save name': 'After_fixation_Attempt2_PLSR_3rdSynapse_Car-T+Target_NB-N205S_rec_Orca'}
 
 import matplotlib.pyplot as plt
 
 deconvolver = Deconvolver()
-deconvolver.setAndLoadData(r'D:\SnoutyData\2023-07-14\PLSR_Test2_PFA_fixation_Tub-NB-N205S_rec_Orca.hdf5', dataPropertiesDict)
+deconvolver.setAndLoadData(r'D:\SnoutyData\2023-07-14\After_fixation_Attempt2_PLSR_3rdSynapse_Car-T+Target_NB-N205S_rec_Orca.hdf5', dataPropertiesDict)
 
 # deconvolved = deconvolver.Deconvolve(reconOptionsDict, algOptionsDict, imFormationModelParameters, saveOptions)
-deconvolver.simpleDeskew(algOptionsDict, reconOptionsDict, saveOptions)
+# deconvolver.simpleDeskew(algOptionsDict, reconOptionsDict, saveOptions)
 
 # import napari
 # viewer = napari.Viewer()

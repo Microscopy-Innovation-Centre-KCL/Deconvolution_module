@@ -27,9 +27,7 @@ class DataFiddler:
                 self.rawData = np.array(datafile[h5dataset][:]).astype(float)
                 datafile.close()
 
-        elif ext in ['.tiff', '.tif']:
-            with tiff.TiffFile(path) as datafile:
-                self.rawData = datafile.asarray().astype(float)
+
 
         if dataPropertiesDict is None: #No dataPropertiesDict given
             if self.dataPropertiesDict is None: # no existing dataPropertiesDict
@@ -38,6 +36,47 @@ class DataFiddler:
                 self.checkData()
         else: # New dataPropertiesDict given
             self.dataPropertiesDict = dataPropertiesDict
+            with h5py.File(path, 'r') as datafile:
+                try:
+                    fileStepSize = datafile[h5dataset].attrs['MS-RESOLFT_Scan:cycleStepSizeUm']
+                    if dataPropertiesDict['Scan step size [nm]'] != 1000*fileStepSize:
+                        out = input('Scan step size [nm] does not match file attribute roStepSizeUm, use file attribute value [y/n]?')
+                        if out == 'y' or out == 'Y':
+                            dataPropertiesDict['Scan step size [nm]'] = 1000*fileStepSize
+                            print('Setting said parameter to:', 1000*datafile[h5dataset].attrs['MS-RESOLFT_Scan:fileStepSize'])
+                except KeyError:
+                    print(r'File does not have the MS-RESOLFT_Scan:roStepSizeUm parameter')
+                try:
+                    fileCycleSteps = datafile[h5dataset].attrs['MS-RESOLFT_Scan:cycleSteps']
+                    if dataPropertiesDict['Cycles'] != fileCycleSteps:
+                        out = input('Cycles does not match file attribute cycleSteps, use file attribute value [y/n]?')
+                        if out == 'y' or out == 'Y':
+                            dataPropertiesDict['Cycles'] = datafile[h5dataset].attrs['MS-RESOLFT_Scan:cycleSteps']
+                            print('Setting said parameter to:',
+                                  datafile[h5dataset].attrs['MS-RESOLFT_Scan:cycleSteps'])
+                except KeyError:
+                    print(r'File does not have the MS-RESOLFT_Scan:cycleSteps')
+                try:
+                    fileRoScanSteps = datafile[h5dataset].attrs['MS-RESOLFT_Scan:roSteps']
+                    if dataPropertiesDict['Planes in cycle'] != fileRoScanSteps:
+                        out = input('Planes in cycle does not match file attribute roSteps, use file attribute value [y/n]?')
+                        if out == 'y' or out == 'Y':
+                            dataPropertiesDict['Planes in cycle'] = datafile[h5dataset].attrs['MS-RESOLFT_Scan:roSteps']
+                            print('Setting said parameter to:',
+                                  datafile[h5dataset].attrs['MS-RESOLFT_Scan:roSteps'])
+                except KeyError:
+                    print(r'File does not have the MS-RESOLFT_Scan:roSteps')
+                try:
+                    fileTimeLapsePoints = datafile[h5dataset].attrs['MS-RESOLFT_Scan:timeLapsePoints']
+                    if dataPropertiesDict['Timepoints'] != fileTimeLapsePoints:
+                        out = input('Planes in cycle does not match file attribute timeLapsePoints, use file attribute value [y/n]?')
+                        if out == 'y' or out == 'Y':
+                            dataPropertiesDict['Timepoints'] = datafile[h5dataset].attrs['MS-RESOLFT_Scan:timeLapsePoints']
+                            print('Setting said parameter to:',
+                                  datafile[h5dataset].attrs['MS-RESOLFT_Scan:timeLapsePoints'])
+                except KeyError:
+                    print(r'File does not have the MS-RESOLFT_Scan:timeLapsePoints')
+
             self.checkData()
 
     def unloadData(self):
