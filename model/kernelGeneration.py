@@ -1,7 +1,7 @@
 import copy
 
 import numpy as np
-from model.DataIO_tools import DataIO_tools
+from .DataIO_tools import DataIO_tools
 from scipy.signal import fftconvolve
 
 class KernelHandler:

@@ -7,15 +7,17 @@ import numba
 from numba import cuda
 from numba.cuda.random import xoroshiro128p_uniform_float32, create_xoroshiro128p_states
 import cupy as cp
-from model.kernelGeneration import KernelHandler
-from model.transformMatGeneration import TransformMatHandler
-from model.gpuTransforms import gaussDistribTransform, convTransform, invConvTransform
-from model.dataFiddler import DataFiddler
-from model.DataIO_tools import DataIO_tools
 import json
 import math
 import copy
 import time
+
+from .kernelGeneration import KernelHandler
+from .transformMatGeneration import TransformMatHandler
+from .gpuTransforms import gaussDistribTransform, convTransform, invConvTransform
+from .dataFiddler import DataFiddler
+from .DataIO_tools import DataIO_tools
+
 class Deconvolver:
 
     def __init__(self):
@@ -80,6 +82,7 @@ class Deconvolver:
         print('Timepoints = ', timepoints)
         for tp in timepoints:
             adjustedData = cp.array(self.DF.getPreprocessedData(reconOptionsDict, timepoints=tp))
+            DataIO_tools.save_data(cp.asnumpy(adjustedData), 'test_adjusted_data.tif')
             recon_canvas = cp.zeros(reconShape, dtype=float)
             gaussDistribTransform[(data_blocks_per_grid_z, data_blocks_per_grid_y, data_blocks_per_grid_x),
                                   (threadsperblock, threadsperblock, threadsperblock)](adjustedData, recon_canvas, M,
@@ -94,9 +97,8 @@ class Deconvolver:
                 saveDataPath = os.path.join(saveFolder, saveName + '_Timepoint_' + str(tp) + '_SimpleDeskew.tif')
                 DataIO_tools.save_data(finalReconstruction, saveDataPath, vx_size=vx_size, unit='nm')
                 saveParamsPath = os.path.join(saveFolder, saveName + '_ReconstructionParameters.json')
-                saveParamDict = {'Data Parameters': dataPropertiesDict,
+                saveParamDict = {'Data Parameters': self.DF.dataPropertiesDict,
                                  'Reconstruction parameters': reconOptionsDict,
-                                 'Image formation model parameters': imFormationModelParameters,
                                  'Algorithmic parameters': algOptionsDict}
                 with open(saveParamsPath, 'w') as fp:
                     json.dump(saveParamDict, fp, indent=4)
@@ -273,7 +275,7 @@ class Deconvolver:
                     saveDataPath = os.path.join(saveFolder, saveName + '_DeconvolutionProgression.tif')
                     DataIO_tools.save_data(saveRecons, saveDataPath, vx_size=vx_size, unit='nm')
                 saveParamsPath = os.path.join(saveFolder, saveName + '_DeconvolutionParameters.json')
-                saveParamDict = {'Data Parameters': dataPropertiesDict,
+                saveParamDict = {'Data Parameters': self.DH.dataPropertiesDict,
                                  'Reconstruction parameters': reconOptionsDict,
                                  'Image formation model parameters': imFormationModelParameters,
                                  'Algorithmic parameters': algOptionsDict}
@@ -357,56 +359,6 @@ def fuseTimePoints(folderPath, fileNamePart1, nrArray, fileNamePart2, averageTim
         savePath = os.path.join(folderPath, fileNamePart1 + fileNamePart2.split('.')[0] + '_FusedTimeLapse.tif')
         DataIO_tools.save_data(allDataTimePoints, savePath)
 
-
-
-
-
-dataPropertiesDict = {'Camera pixel size [nm]': 116,
-                      'Camera offset': 100,
-                      'Scan step size [nm]': 105, #105 or 210
-                      'Tilt angle [deg]': 35,
-                      'Scan axis': 0,
-                      'Tilt axis': 2,
-                      'Data stacking': 'PLSR Interleaved',
-                      'Planes in cycle': 30, # 30 planes for 60 um and 20 planes for 40 um
-                      'Cycles': 20, #if 105 nm step size -> 20 cycles, 210 nm -> 10 cycles
-                      'Timepoints': 3,
-                      'Pos/Neg scan direction': 'Pos'} #Neg in most simulations, Pos in real data
-
-reconOptionsDict = {'Reconstruction voxel size [nm]': 100,
-                    'Correct first cycle': True,
-                    'Correct pixel offsets': False,
-                    'Skew correction pixel per cycle': 0,#~-0.3 used for skewed stage scan
-                    'Process timepoints': 'All',
-                    'Average timepoints': True}
-
-algOptionsDict = {'Gradient consent': False,
-                  'Clip factor for kernel cropping': 0.01,
-                  'Iterations': 10}
-
-reconPxSize = str(reconOptionsDict['Reconstruction voxel size [nm]'])
-detNA = 1.1#1.1 or 1.26 available now
-psfPath = os.path.join(r'PSFs', str(detNA)+'NA', reconPxSize + 'nm', 'PSF_RW_'+str(detNA)+'_' + reconPxSize + 'nmPx_101x101x101.tif')
-
-imFormationModelParameters = {'Optical PSF path': psfPath,
-                              'Detection NA': detNA,
-                              'Confined sheet FWHM [nm]': 200,
-                              'Read-out sheet FWHM [nm]': 1200,
-                              'Background sheet ratio': 0.1}
-
-saveOptions = {'Save to disc': True,
-               'Save mode': 'Final',
-               'Progression mode': 'All',
-               'Save folder': r'D:\SnoutyData\2023-07-14',
-               'Save name': 'After_fixation_Attempt2_PLSR_3rdSynapse_Car-T+Target_NB-N205S_rec_Orca'}
-
-import matplotlib.pyplot as plt
-
-deconvolver = Deconvolver()
-deconvolver.setAndLoadData(r'D:\SnoutyData\2023-07-14\After_fixation_Attempt2_PLSR_3rdSynapse_Car-T+Target_NB-N205S_rec_Orca.hdf5', dataPropertiesDict)
-
-# deconvolved = deconvolver.Deconvolve(reconOptionsDict, algOptionsDict, imFormationModelParameters, saveOptions)
-# deconvolver.simpleDeskew(algOptionsDict, reconOptionsDict, saveOptions)
 
 # import napari
 # viewer = napari.Viewer()
